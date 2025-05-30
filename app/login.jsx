@@ -9,6 +9,57 @@ import { useRouter } from "expo-router";
 
 export default function Login() {
   const router = useRouter();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = async () => {
+    try {
+      const trimmedEmail = email.trim().toLowerCase();
+      const trimmedPassword = password.trim();
+
+      if (!trimmedEmail || !trimmedPassword) {
+        Alert.alert("Erro", "Preencha todos os campos");
+        return;
+      }
+
+      const response = await fetch('https://back-end-pi-27ls.onrender.com/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Erro ao fazer login");
+      }
+
+      await AsyncStorage.setItem('authToken', result.token);
+      await AsyncStorage.setItem('userData', JSON.stringify(result.user));
+
+      Alert.alert("Sucesso", `Login realizado com sucesso! Bem-vindo ${result.user.email}`);
+
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1500);
+
+    } catch (error) {
+      console.error("Erro no login:", error);
+
+      let errorMessage = error.message;
+
+      if (error.message.includes('Credenciais inválidas')) {
+        errorMessage = "E-mail ou senha incorretos";
+      } else if (error.message.includes('servidor')) {
+        errorMessage = "Problema no servidor. Tente novamente mais tarde";
+      }
+
+      Alert.alert("Erro", errorMessage);
+    }
+  };
     
   const handleCadastro = () => {
     router.push("/")
@@ -35,11 +86,11 @@ export default function Login() {
           style={styles.inputs}
           placeholder="Senha"
           secureTextEntry
-          value={senha}
-          onChangeText={setSenha}
+          value={password}
+          onChangeText={setPassword}
         />
 
-          <TouchableOpacity style={styles.button}>
+          <TouchableOpacity style={styles.button} onPress={handleLogin}>
             <Text>Login</Text>
           </TouchableOpacity>
     </View>

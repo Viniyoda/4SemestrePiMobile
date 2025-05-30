@@ -1,104 +1,148 @@
-import React, { useState } from "react";
-import { 
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity } from "react-native";
-import { useRouter } from "expo-router";
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { useForm, Controller } from 'react-hook-form';
+import axios from 'axios';
+import Toast from 'react-native-toast-message';
+import { useRouter } from 'expo-router';
 
-export default function Cadastro() {
+export default function RegisterScreen() {
+  const { control, handleSubmit, formState: { errors } } = useForm();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
-  // Estados para capturar os valores dos inputs
-  const [nome, setNome] = useState("");
-  const [sobrenome, setSobrenome] = useState("");
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
+  const onSubmit = async (data) => {
+    setIsSubmitting(true);
 
-  // Função para realizar o cadastro
-  const onSubmit = async () => {
-    const data = { nome, sobrenome, email, senha };
+    const sanitizedData = {
+      firstName: data.firstName.trim(),
+      lastName: data.lastName.trim(),
+      email: data.email.trim().toLowerCase(),
+      password: data.password.trim(),
+    };
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      const response = await axios.post(
+        "https://back-end-pi-27ls.onrender.com/api/auth/register",
+        sanitizedData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      const result = await response.json();
-
-      if (response.ok) {
-        Alert.alert("Sucesso", "Cadastro realizado com sucesso!");
-        console.log("Usuário registrado:", result.user);
-        router.push("/login"); // Redireciona para login
+      if (response.status === 200 || response.status === 201) {
+        Toast.show({
+          type: 'success',
+          text1: 'Cadastro realizado com sucesso!',
+        });
+        router.push('/login');
       } else {
-        Alert.alert("Erro", result.error || "Erro ao realizar cadastro");
+        Toast.show({
+          type: 'error',
+          text1: response.data?.error || 'Erro ao realizar cadastro',
+        });
       }
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível conectar ao servidor");
+      const result = error.response?.data;
+      Toast.show({
+        type: 'error',
+        text1: result?.error || 'Erro ao conectar com o servidor',
+      });
       console.error("Erro na requisição:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleLogin = () => {
-    router.push("/login")
-  }
+    router.push('/login');
+  };
 
   return (
     <View style={styles.loginContainer}>
-        <Text style={styles.textwhite}>Bem vindo ao dashboard do P.I</Text>
-        <Text style={styles.textTitle}>Criar uma conta</Text>
+      <Text style={styles.textwhite}>Bem vindo ao dashboard do P.I</Text>
+      <Text style={styles.textTitle}>Criar uma conta</Text>
 
-        <Text style={styles.textwhite}>Já possui uma conta?</Text>
-          <TouchableOpacity onPress={handleLogin}>
-            <Text style={styles.link} >Login</Text>
-          </TouchableOpacity>
+      <Text style={styles.textwhite}>Já possui uma conta?</Text>
+      <TouchableOpacity onPress={handleLogin}>
+        <Text style={styles.link}>Login</Text>
+      </TouchableOpacity>
 
+      <Controller
+        control={control}
+        name="firstName"
+        rules={{ required: "Nome é obrigatório" }}
+        render={({ field: { onChange, value } }) => (
           <TextInput
-          style={styles.inputs}
-          placeholder="Nome"
-          value={nome}
-          onChangeText={setNome}
-        />
-        <TextInput
-          style={styles.inputs}
-          placeholder="Sobrenome"
-          value={sobrenome}
-          onChangeText={setSobrenome}
-        />
-        <TextInput
-          style={styles.inputs}
-          placeholder="Email"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={styles.inputs}
-          placeholder="Senha"
-          secureTextEntry
-          value={senha}
-          onChangeText={setSenha}
-        />
+            style={styles.inputs}
+            placeholder="Nome"
+            onChangeText={onChange}
+            value={value}
+          />
+        )}
+      />
+      <Controller
+        control={control}
+        name="lastName"
+        rules={{ required: "Sobrenome é obrigatório" }}
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={styles.inputs}
+            placeholder="Sobrenome"
+            onChangeText={onChange}
+            value={value}
+          />
+        )}
+      />
+      <Controller
+        control={control}
+        name="email"
+        rules={{ required: "Email é obrigatório" }}
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={styles.inputs}
+            placeholder="Email"
+            keyboardType="email-address"
+            onChangeText={onChange}
+            value={value}
+          />
+        )}
+      />
+      <Controller
+        control={control}
+        name="password"
+        rules={{ required: "Senha é obrigatória" }}
+        render={({ field: { onChange, value } }) => (
+          <TextInput
+            style={styles.inputs}
+            placeholder="Senha"
+            secureTextEntry
+            onChangeText={onChange}
+            value={value}
+          />
+        )}
+      />
 
-          <TouchableOpacity style={styles.button} onPress={onSubmit}>
-            <Text>Cadastrar</Text>
-          </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={handleSubmit(onSubmit)} disabled={isSubmitting}>
+        {isSubmitting ? (
+          <ActivityIndicator color="#000" />
+        ) : (
+          <Text>Cadastrar</Text>
+        )}
+      </TouchableOpacity>
+
+      <Toast />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-
   loginContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: '#052338',
-    color: '#fff',
-    textDecorationColor: '#fff',
   },
   textTitle: {
     marginBottom: '3%',
