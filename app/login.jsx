@@ -4,8 +4,10 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  TouchableOpacity } from "react-native";
+  TouchableOpacity,
+  Alert } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Login() {
   const router = useRouter();

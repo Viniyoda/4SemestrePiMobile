@@ -5,7 +5,7 @@ import axios from 'axios';
 import Toast from 'react-native-toast-message';
 import { useRouter } from 'expo-router';
 
-export default function RegisterScreen() {
+export default function Cadastro() {
   const { control, handleSubmit, formState: { errors } } = useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
