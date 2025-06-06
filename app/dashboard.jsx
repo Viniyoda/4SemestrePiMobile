@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Dimensions, StyleSheet } from 'react-native';
-import { PieChart, BarChart } from 'react-native-chart-kit';
+import { PieChart, BarChart, LineChart } from 'react-native-chart-kit';
 import axios from 'axios';
 
 const screenWidth = Dimensions.get('window').width;
@@ -9,36 +9,62 @@ export default function DashboardUmidade() {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-    axios.get("https://back-end-pi-27ls.onrender.com/api/sensor/stats")
-      .then((response) => {
-        const data = response.data;
+  axios.get("https://back-end-pi-27ls.onrender.com/api/sensor/stats")
+    .then((response) => {
+      const data = response.data;
+      const distribuicao = data.latest_data.map((item) => ({
+        date: new Date(item.timestamp),
+        valor: item.humidity
+      }));
 
-        const distribuicao = data.latest_data.map((item) => ({
-          data: new Date(item.timestamp).toLocaleDateString('pt-BR', { month: 'short' }),
-          valor: item.humidity
-        }));
-
-        setStats({
-          media: data.mean,
-          mediana: data.median,
-          moda: data.mode,
-          desvioPadrao: data.std_dev,
-          assimetria: data.skewness,
-          curtose: data.kurtosis,
-          previsaoAmanha: data.trend?.tomorrow_prediction || 0,
-          statusAmanha: data.trend?.predicted_classification || '',
-          statusAtual: data.latest_data?.[0]?.humidity || 0,
-          distribuicao: data.binomial_distribution || {},
-          mediaMensal: {
-            junho: distribuicao.filter(d => d.data.includes('jun')).reduce((sum, d) => sum + d.valor, 0) / distribuicao.filter(d => d.data.includes('jun')).length || 0,
-            maio: distribuicao.filter(d => d.data.includes('mai')).reduce((sum, d) => sum + d.valor, 0) / distribuicao.filter(d => d.data.includes('mai')).length || 0,
-          }
-        });
-      })
-      .catch((error) => {
-        console.error("Erro ao buscar dados do dashboard:", error);
+      // Agrupando por mês
+      const mensal = {};
+      distribuicao.forEach((d) => {
+        const mes = d.date.toLocaleString('pt-BR', { month: 'short' });
+        if (!mensal[mes]) mensal[mes] = { total: 0, count: 0 };
+        mensal[mes].total += d.valor;
+        mensal[mes].count += 1;
       });
-  }, []);
+
+      const mesesOrdenados = Object.keys(mensal).slice(-6); // últimos 6 meses
+      const mediaMensal = {};
+      mesesOrdenados.forEach((mes) => {
+        mediaMensal[mes] = mensal[mes].total / mensal[mes].count;
+      });
+
+      setStats({
+        media: data.mean,
+        mediana: data.median,
+        moda: data.mode,
+        desvioPadrao: data.std_dev,
+        assimetria: data.skewness,
+        curtose: data.kurtosis,
+        previsaoAmanha: data.trend?.tomorrow_prediction || 0,
+        statusAmanha: data.trend?.predicted_classification || '',
+        statusAtual: data.latest_data?.[0]?.humidity || 0,
+        distribuicao: data.binomial_distribution || {},
+        mediaMensal,
+        mesesOrdenados
+      });
+    })
+    .catch((error) => {
+      console.error("Erro ao buscar dados do dashboard:", error);
+    });
+}, []);
+
+function getStatusInfo(humidity) {
+  if (humidity < 30) {
+    return { status: "Crítico", color: "#e74c3c" };
+  } else if (humidity < 50) {
+    return { status: "Baixo", color: "#f39c12" };
+  } else if (humidity < 70) {
+    return { status: "Médio", color: "#f1c40f" };
+  } else if (humidity <= 100) {
+    return { status: "Bom", color: "#2ecc71" };
+  } else {
+    return { status: "Sobrecarregado", color: "#9b59b6" };
+  }
+}
 
   const pieData = [
     { name: 'Crítico', population: stats?.distribuicao?.critico || 0, color: '#e74c3c', legendFontColor: '#333', legendFontSize: 12 },
@@ -49,23 +75,69 @@ export default function DashboardUmidade() {
   ];
 
   const barData = {
-    labels: ['jun.', 'mai.'],
+    labels: stats?.mesesOrdenados || [],
     datasets: [
       {
-        data: [stats?.mediaMensal?.junho || 0, stats?.mediaMensal?.maio || 0]
+        data: stats?.mesesOrdenados?.map(mes => parseFloat(stats.mediaMensal[mes].toFixed(2))) || [],
+        color: (opacity = 1) => `rgba(46, 204, 113, ${opacity})`, // verde
       }
     ]
   };
+
+const status = {
+  mesesOrdenados: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
+  mediaMensal: {
+    Jan: 65.23,
+    Fev: 70.75,
+    Mar: 68.4,
+    Abr: 74.1,
+    Mai: 69.5,
+    Jun: 72.0
+  }
+};
+
+
+  const safeValue = val => (typeof val === 'number' && isFinite(val) ? val : 0);
+
+const lineData = {
+  labels: status?.mesesOrdenados || [],
+  datasets: [
+    {
+      data: status?.mesesOrdenados?.map(mes =>
+        parseFloat(safeValue(status?.mediaMensal?.[mes]).toFixed(2))
+      ) || [],
+      color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`, // azul
+      strokeWidth: 2
+    }
+  ],
+  legend: ['Umidade (%)']
+};
+//const safeValue = val => (typeof val === 'number' && isFinite(val) ? val : 0);
+//const lineData = {
+//  labels: stats?.mesesOrdenados || [],
+//  datasets: [
+//    {
+//      data: stats?.mesesOrdenados?.map(mes =>
+//        parseFloat(safeValue(stats?.mediaMensal?.[mes]).toFixed(2))
+//      ) || [],
+//      color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
+//      strokeWidth: 2
+//    }
+//  ],
+//  legend: ['Umidade (%)']
+//};
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Dashboard de Monitoramento</Text>
 
-      <View style={styles.cardGreen}>
+      {stats && (
+      <View style={[styles.cardDynamic, { backgroundColor: getStatusInfo(stats.statusAtual).color }]}>
         <Text style={styles.cardTitle}>Status Atual de Umidade</Text>
-        <Text style={styles.percent}>{stats?.statusAtual?.toFixed(2) || '---'}%</Text>
-        <Text style={styles.goodText}>Bom</Text>
+        <Text style={styles.percent}>{stats.statusAtual.toFixed(2)}%</Text>
+        <Text style={styles.goodText}>{getStatusInfo(stats.statusAtual).status}</Text>
       </View>
+      )}
 
       <View style={styles.statsHorizontal}>
         <Text style={styles.statsText}>Média: {stats?.media?.toFixed(2) || '---'}%</Text>
@@ -74,10 +146,12 @@ export default function DashboardUmidade() {
       </View>
 
       <View style={styles.statsBox}>
-        <Text>Assimetria: {stats?.assimetria || 0}</Text>
-        <Text>Curtose: {stats?.curtose || 0}</Text>
-        <Text>Desvio Padrão: {stats?.desvioPadrao || 0}</Text>
-        <Text>Previsão Amanhã: {stats?.previsaoAmanha || 0}</Text>
+        <Text style={styles.goodText}>Assimetria: {stats?.assimetria || 0}</Text>
+        <Text style={styles.goodText}>Curtose: {stats?.curtose || 0}</Text>
+      </View>
+      <View style={styles.statsBox}>
+        <Text style={styles.goodText}>Desvio Padrão: {stats?.desvioPadrao || 0}</Text>
+        <Text style={styles.goodText}>Previsão Amanhã: {stats?.previsaoAmanha || 0}</Text>
       </View>
 
       <Text style={styles.chartTitle}>Distribuição de Status do Solo</Text>
@@ -98,25 +172,44 @@ export default function DashboardUmidade() {
         width={screenWidth - 20}
         height={220}
         chartConfig={chartConfig}
-        verticalLabelRotation={0}
+        verticalLabelRotation={30}
         fromZero={true}
+        showValuesOnTopOfBars={true}
       />
+
+      <Text style={styles.chartTitle}>Tendência de Umidade (Linha)</Text>
+      <LineChart
+        data={lineData}
+        width={screenWidth - 20}
+        height={250}
+        chartConfig={chartConfig}
+        bezier // ⚠️ Isso é essencial para suavizar a curva
+        style={{
+          borderRadius: 10,
+          marginVertical: 10
+        }}
+/>
+
     </ScrollView>
   );
 }
 
 const chartConfig = {
-  backgroundGradientFrom: '#fff',
-  backgroundGradientTo: '#fff',
-  decimalPlaces: 2,
-  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+  backgroundGradientFrom: '#ffffff',
+  backgroundGradientTo: '#ffffff',
+  fillShadowGradient: '#007bff', // cor da barra (azul)
+  fillShadowGradientOpacity: 1,
+  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, // cor dos textos (preto)
   labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-  propsForBackgroundLines: {
-    strokeDasharray: '', // linhas contínuas
-  },
+  barPercentage: 0.5, // largura das barras (ajustável entre 0 e 1)
   propsForLabels: {
     fontSize: 12,
-  }
+    fontWeight: 'bold'
+  },
+  propsForBackgroundLines: {
+    stroke: '#e3e3e3'
+  },
+  decimalPlaces: 0
 };
 
 const styles = StyleSheet.create({
@@ -130,13 +223,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center'
-  },
-  cardGreen: {
-    backgroundColor: '#2ecc71',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-    marginBottom: 20
   },
   cardTitle: {
     color: '#fff',
@@ -162,12 +248,22 @@ const styles = StyleSheet.create({
   statsBox: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    backgroundColor: '#052338',
+    borderRadius: 10,
+    padding: 10,
     justifyContent: 'space-around',
     marginBottom: 20
   },
   chartTitle: {
     fontSize: 18,
     marginVertical: 10,
-    textAlign: 'center'
+    textAlign: 'center',
+    fontWeight: 'bold'
+  },
+  cardDynamic: {
+  borderRadius: 10,
+  padding: 15,
+  alignItems: 'center',
+  marginBottom: 20
   }
 });
