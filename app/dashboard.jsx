@@ -9,134 +9,160 @@ export default function DashboardUmidade() {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-  axios.get("https://back-end-pi-27ls.onrender.com/api/sensor/stats")
-    .then((response) => {
-      const data = response.data;
-      const distribuicao = data.latest_data.map((item) => ({
-        date: new Date(item.timestamp),
-        valor: item.humidity
-      }));
+    axios.get("https://back-end-pi-27ls.onrender.com/api/sensor/stats")
+      .then((response) => {
+        const data = response.data;
 
-      // Agrupando por mês
-      const mensal = {};
-      distribuicao.forEach((d) => {
-        const mes = d.date.toLocaleString('pt-BR', { month: 'short' });
-        if (!mensal[mes]) mensal[mes] = { total: 0, count: 0 };
-        mensal[mes].total += d.valor;
-        mensal[mes].count += 1;
+        const distribuicaoRaw = data.latest_data.map((item) => ({
+          date: new Date(item.timestamp),
+          valor: item.humidity
+        }));
+
+        // Agrupando por mês
+        const mensal = {};
+        distribuicaoRaw.forEach((d) => {
+          const mes = d.date.toLocaleString('pt-BR', { month: 'short' });
+          if (!mensal[mes]) mensal[mes] = { total: 0, count: 0 };
+          mensal[mes].total += d.valor;
+          mensal[mes].count += 1;
+        });
+
+        const mesesOrdenados = Object.keys(mensal).slice(-6);
+        const mediaMensal = {};
+        mesesOrdenados.forEach((mes) => {
+          mediaMensal[mes] = mensal[mes].total / mensal[mes].count;
+        });
+
+        // Classificação por categoria
+        const distribuicao = {
+          critico: 0,
+          baixo: 0,
+          medio: 0,
+          bom: 0,
+          sobrecarregado: 0
+        };
+
+        data.latest_data.forEach((item) => {
+          const h = item.humidity;
+          if (h < 30) distribuicao.critico++;
+          else if (h < 50) distribuicao.baixo++;
+          else if (h < 70) distribuicao.medio++;
+          else if (h <= 100) distribuicao.bom++;
+          else distribuicao.sobrecarregado++;
+        });
+
+        const total = data.latest_data.length;
+        const distribuicaoPercentual = {
+          critico: (distribuicao.critico / total) * 100,
+          baixo: (distribuicao.baixo / total) * 100,
+          medio: (distribuicao.medio / total) * 100,
+          bom: (distribuicao.bom / total) * 100,
+          sobrecarregado: (distribuicao.sobrecarregado / total) * 100
+        };
+
+        setStats({
+          media: data.mean,
+          mediana: data.median,
+          moda: data.mode,
+          desvioPadrao: data.std_dev,
+          assimetria: data.skewness,
+          curtose: data.kurtosis,
+          previsaoAmanha: data.trend?.tomorrow_prediction || 0,
+          statusAmanha: data.trend?.predicted_classification || '',
+          statusAtual: data.latest_data?.[0]?.humidity || 0,
+          distribuicao: distribuicaoPercentual,
+          mediaMensal,
+          mesesOrdenados
+        });
+      })
+      .catch((error) => {
+        console.error("Erro ao buscar dados do dashboard:", error);
       });
+  }, []);
 
-      const mesesOrdenados = Object.keys(mensal).slice(-6); // últimos 6 meses
-      const mediaMensal = {};
-      mesesOrdenados.forEach((mes) => {
-        mediaMensal[mes] = mensal[mes].total / mensal[mes].count;
-      });
-
-      setStats({
-        media: data.mean,
-        mediana: data.median,
-        moda: data.mode,
-        desvioPadrao: data.std_dev,
-        assimetria: data.skewness,
-        curtose: data.kurtosis,
-        previsaoAmanha: data.trend?.tomorrow_prediction || 0,
-        statusAmanha: data.trend?.predicted_classification || '',
-        statusAtual: data.latest_data?.[0]?.humidity || 0,
-        distribuicao: data.binomial_distribution || {},
-        mediaMensal,
-        mesesOrdenados
-      });
-    })
-    .catch((error) => {
-      console.error("Erro ao buscar dados do dashboard:", error);
-    });
-}, []);
-
-function getStatusInfo(humidity) {
-  if (humidity < 30) {
-    return { status: "Crítico", color: "#e74c3c" };
-  } else if (humidity < 50) {
-    return { status: "Baixo", color: "#f39c12" };
-  } else if (humidity < 70) {
-    return { status: "Médio", color: "#f1c40f" };
-  } else if (humidity <= 100) {
-    return { status: "Bom", color: "#2ecc71" };
-  } else {
-    return { status: "Sobrecarregado", color: "#9b59b6" };
+  function getStatusInfo(humidity) {
+    if (humidity < 30) return { status: "Crítico", color: "#e74c3c" };
+    else if (humidity < 50) return { status: "Baixo", color: "#f39c12" };
+    else if (humidity < 70) return { status: "Médio", color: "#f1c40f" };
+    else if (humidity <= 100) return { status: "Bom", color: "#2ecc71" };
+    else return { status: "Sobrecarregado", color: "#9b59b6" };
   }
-}
 
   const pieData = [
-    { name: 'Crítico', population: stats?.distribuicao?.critico || 0, color: '#e74c3c', legendFontColor: '#333', legendFontSize: 12 },
-    { name: 'Baixo', population: stats?.distribuicao?.baixo || 0, color: '#f39c12', legendFontColor: '#333', legendFontSize: 12 },
-    { name: 'Médio', population: stats?.distribuicao?.medio || 0, color: '#f1c40f', legendFontColor: '#333', legendFontSize: 12 },
-    { name: 'Bom', population: stats?.distribuicao?.bom || 0, color: '#2ecc71', legendFontColor: '#333', legendFontSize: 12 },
-    { name: 'Sobrecarregado', population: stats?.distribuicao?.sobrecarregado || 0, color: '#9b59b6', legendFontColor: '#333', legendFontSize: 12 }
-  ];
+  {
+    name: `% Crítico`,
+    population: parseFloat((stats?.distribuicao?.critico || 0).toFixed(1)),
+    color: '#e74c3c',
+    legendFontColor: '#333',
+    legendFontSize: 12
+  },
+  {
+    name: `% Baixo`,
+    population: parseFloat((stats?.distribuicao?.baixo || 0).toFixed(1)),
+    color: '#f39c12',
+    legendFontColor: '#333',
+    legendFontSize: 12
+  },
+  {
+    name: `% Médio`,
+    population: parseFloat((stats?.distribuicao?.medio || 0).toFixed(1)),
+    color: '#f1c40f',
+    legendFontColor: '#333',
+    legendFontSize: 12
+  },
+  {
+    name: `% Bom`,
+    population: parseFloat((stats?.distribuicao?.bom || 0).toFixed(1)),
+    color: '#2ecc71',
+    legendFontColor: '#333',
+    legendFontSize: 12
+  },
+  {
+    name: `% Sobrecarregado`,
+    population: parseFloat((stats?.distribuicao?.sobrecarregado || 0).toFixed(1)),
+    color: '#9b59b6',
+    legendFontColor: '#333',
+    legendFontSize: 12
+  }
+];
+
 
   const barData = {
     labels: stats?.mesesOrdenados || [],
     datasets: [
       {
         data: stats?.mesesOrdenados?.map(mes => parseFloat(stats.mediaMensal[mes].toFixed(2))) || [],
-        color: (opacity = 1) => `rgba(46, 204, 113, ${opacity})`, // verde
+        color: (opacity = 1) => `rgba(46, 204, 113, ${opacity})`,
       }
     ]
   };
 
-const status = {
-  mesesOrdenados: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
-  mediaMensal: {
-    Jan: 65.23,
-    Fev: 70.75,
-    Mar: 68.4,
-    Abr: 74.1,
-    Mai: 69.5,
-    Jun: 72.0
-  }
-};
-
-
   const safeValue = val => (typeof val === 'number' && isFinite(val) ? val : 0);
 
-const lineData = {
-  labels: status?.mesesOrdenados || [],
-  datasets: [
-    {
-      data: status?.mesesOrdenados?.map(mes =>
-        parseFloat(safeValue(status?.mediaMensal?.[mes]).toFixed(2))
-      ) || [],
-      color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`, // azul
-      strokeWidth: 2
-    }
-  ],
-  legend: ['Umidade (%)']
-};
-//const safeValue = val => (typeof val === 'number' && isFinite(val) ? val : 0);
-//const lineData = {
-//  labels: stats?.mesesOrdenados || [],
-//  datasets: [
-//    {
-//      data: stats?.mesesOrdenados?.map(mes =>
-//        parseFloat(safeValue(stats?.mediaMensal?.[mes]).toFixed(2))
-//      ) || [],
-//      color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
-//      strokeWidth: 2
-//    }
-//  ],
-//  legend: ['Umidade (%)']
-//};
+  const lineData = {
+    labels: stats?.mesesOrdenados || [],
+    datasets: [
+      {
+        data: stats?.mesesOrdenados?.map(mes =>
+          parseFloat(safeValue(stats?.mediaMensal?.[mes]).toFixed(2))
+        ) || [],
+        color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
+        strokeWidth: 2
+      }
+    ],
+    legend: ['Umidade (%)']
+  };
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Dashboard de Monitoramento</Text>
 
       {stats && (
-      <View style={[styles.cardDynamic, { backgroundColor: getStatusInfo(stats.statusAtual).color }]}>
-        <Text style={styles.cardTitle}>Status Atual de Umidade</Text>
-        <Text style={styles.percent}>{stats.statusAtual.toFixed(2)}%</Text>
-        <Text style={styles.goodText}>{getStatusInfo(stats.statusAtual).status}</Text>
-      </View>
+        <View style={[styles.cardDynamic, { backgroundColor: getStatusInfo(stats.statusAtual).color }]}>
+          <Text style={styles.cardTitle}>Status Atual de Umidade</Text>
+          <Text style={styles.percent}>{stats.statusAtual.toFixed(2)}%</Text>
+          <Text style={styles.goodText}>{getStatusInfo(stats.statusAtual).status}</Text>
+        </View>
       )}
 
       <View style={styles.statsHorizontal}>
@@ -183,13 +209,12 @@ const lineData = {
         width={screenWidth - 20}
         height={250}
         chartConfig={chartConfig}
-        bezier // ⚠️ Isso é essencial para suavizar a curva
+        bezier
         style={{
           borderRadius: 10,
           marginVertical: 10
         }}
-/>
-
+      />
     </ScrollView>
   );
 }
@@ -197,11 +222,11 @@ const lineData = {
 const chartConfig = {
   backgroundGradientFrom: '#ffffff',
   backgroundGradientTo: '#ffffff',
-  fillShadowGradient: '#007bff', // cor da barra (azul)
+  fillShadowGradient: '#007bff',
   fillShadowGradientOpacity: 1,
-  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, // cor dos textos (preto)
+  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
   labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-  barPercentage: 0.5, // largura das barras (ajustável entre 0 e 1)
+  barPercentage: 0.5,
   propsForLabels: {
     fontSize: 12,
     fontWeight: 'bold'
@@ -261,9 +286,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold'
   },
   cardDynamic: {
-  borderRadius: 10,
-  padding: 15,
-  alignItems: 'center',
-  marginBottom: 20
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+    marginBottom: 20
   }
 });
