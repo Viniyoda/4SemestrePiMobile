@@ -42,6 +42,13 @@ export default function DashboardUmidade() {
           sobrecarregado: 0
         };
 
+        const historico = data.latest_data
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)) // Ordenar cronologicamente
+          .map((item) => ({
+            label: new Date(item.timestamp).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            valor: item.humidity
+          }));
+
         data.latest_data.forEach((item) => {
           const h = item.humidity;
           if (h < 30) distribuicao.critico++;
@@ -72,6 +79,7 @@ export default function DashboardUmidade() {
           statusAtual: data.latest_data?.[0]?.humidity || 0,
           distribuicao: distribuicaoPercentual,
           mediaMensal,
+          historico,
           mesesOrdenados
         });
       })
@@ -89,43 +97,42 @@ export default function DashboardUmidade() {
   }
 
   const pieData = [
-  {
-    name: `% Crítico`,
-    population: parseFloat((stats?.distribuicao?.critico || 0).toFixed(1)),
-    color: '#e74c3c',
-    legendFontColor: '#333',
-    legendFontSize: 12
-  },
-  {
-    name: `% Baixo`,
-    population: parseFloat((stats?.distribuicao?.baixo || 0).toFixed(1)),
-    color: '#f39c12',
-    legendFontColor: '#333',
-    legendFontSize: 12
-  },
-  {
-    name: `% Médio`,
-    population: parseFloat((stats?.distribuicao?.medio || 0).toFixed(1)),
-    color: '#f1c40f',
-    legendFontColor: '#333',
-    legendFontSize: 12
-  },
-  {
-    name: `% Bom`,
-    population: parseFloat((stats?.distribuicao?.bom || 0).toFixed(1)),
-    color: '#2ecc71',
-    legendFontColor: '#333',
-    legendFontSize: 12
-  },
-  {
-    name: `% Sobrecarregado`,
-    population: parseFloat((stats?.distribuicao?.sobrecarregado || 0).toFixed(1)),
-    color: '#9b59b6',
-    legendFontColor: '#333',
-    legendFontSize: 12
-  }
-];
-
+    {
+      name: `% Crítico`,
+      population: parseFloat((stats?.distribuicao?.critico || 0).toFixed(1)),
+      color: '#e74c3c',
+      legendFontColor: '#333',
+      legendFontSize: 12
+    },
+    {
+      name: `% Baixo`,
+      population: parseFloat((stats?.distribuicao?.baixo || 0).toFixed(1)),
+      color: '#f39c12',
+      legendFontColor: '#333',
+      legendFontSize: 12
+    },
+    {
+      name: `% Médio`,
+      population: parseFloat((stats?.distribuicao?.medio || 0).toFixed(1)),
+      color: '#f1c40f',
+      legendFontColor: '#333',
+      legendFontSize: 12
+    },
+    {
+      name: `% Bom`,
+      population: parseFloat((stats?.distribuicao?.bom || 0).toFixed(1)),
+      color: '#2ecc71',
+      legendFontColor: '#333',
+      legendFontSize: 12
+    },
+    {
+      name: `% Sobrecarregado`,
+      population: parseFloat((stats?.distribuicao?.sobrecarregado || 0).toFixed(1)),
+      color: '#9b59b6',
+      legendFontColor: '#333',
+      legendFontSize: 12
+    }
+  ];
 
   const barData = {
     labels: stats?.mesesOrdenados || [],
@@ -137,21 +144,19 @@ export default function DashboardUmidade() {
     ]
   };
 
-  const safeValue = val => (typeof val === 'number' && isFinite(val) ? val : 0);
+  const lastFiveHistorico = stats?.historico?.slice(-5) || [];
 
   const lineData = {
-    labels: stats?.mesesOrdenados || [],
-    datasets: [
-      {
-        data: stats?.mesesOrdenados?.map(mes =>
-          parseFloat(safeValue(stats?.mediaMensal?.[mes]).toFixed(2))
-        ) || [],
-        color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
-        strokeWidth: 2
-      }
-    ],
-    legend: ['Umidade (%)']
-  };
+  labels: lastFiveHistorico.map(item => item.label),
+  datasets: [
+    {
+      data: lastFiveHistorico.map(item => item.valor),
+      color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
+      strokeWidth: 2
+    }
+  ],
+  legend: ['Umidade (%)']
+};
 
   return (
     <ScrollView style={styles.container}>
@@ -203,18 +208,33 @@ export default function DashboardUmidade() {
         showValuesOnTopOfBars={true}
       />
 
-      <Text style={styles.chartTitle}>Tendência de Umidade (Linha)</Text>
-      <LineChart
-        data={lineData}
-        width={screenWidth - 20}
-        height={250}
-        chartConfig={chartConfig}
-        bezier
-        style={{
-          borderRadius: 10,
-          marginVertical: 10
-        }}
-      />
+      <Text style={styles.chartTitle}>Histórico de Umidade</Text>
+      {stats && (
+        <LineChart
+          data={lineData}
+          width={screenWidth - 20}
+          height={220}
+          chartConfig={chartConfig}
+          bezier
+          fromZero
+          renderDotContent={({ x, y, index }) => (
+            <Text
+              key={index}
+              style={{
+                position: 'absolute',
+                top: y - 20,
+                left: x - 10,
+                fontSize: 12,
+                color: '#000',
+                fontWeight: 'bold',
+                backgroundColor: 'transparent',
+              }}
+            >
+              {lineData.datasets[0].data[index].toFixed(1)}
+            </Text>
+          )}
+        />
+      )}
     </ScrollView>
   );
 }
